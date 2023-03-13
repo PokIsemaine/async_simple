@@ -15,7 +15,7 @@ async\_simple是阿里巴巴开源的轻量级C++异步框架。提供了基于C
 
 # 准备环境
 
-async\_simple 涉及 C++20 协程，对编译器版本有较高要求。需要 clang11 或 gcc10 及其以上版本。编译运行测试需要 gtest，使用`bazel`可自动拉取gtest。需要 libaio 的功能的需要依赖 libaio。
+async\_simple 涉及 C++20 协程，对编译器版本有较高要求。需要 clang10 或 gcc10 或 Apple-clang14 及其以上版本。编译运行测试需要 gtest，使用`bazel`可自动拉取gtest。需要 libaio 的功能的需要依赖 libaio。
 
 注意当使用 gcc12 时需要加上 `-Wno-maybe-uninitialized` 选项因为 gcc12 的一个误报。详情可见 https://github.com/alibaba/async_simple/issues/234。
 
@@ -192,6 +192,28 @@ CXX=g++-11 CC=gcc-11 cmake .. -DCMAKE_BUILD_TYPE=Release
 
 关于基于C++20无栈协程（Lazy）和有栈协程（Uthread）的性能定量分析，详见[定量分析报告](./docs/docs.cn/基于async_simple的协程性能定量分析.md)。
 
+# C++20 Modules
+
+我们在 `modules/async_simple.cppm` 中对 C++20 Modules 做了实验性质的支持。`async_simple` Module 可被 `xmake` 和 `cmake` 编译。我们可以在 `CountChar`, `ReadFiles`, `LazyTest.cpp` 以及 `FutureTest.cpp` 中找到相关的使用方法。
+
+我们需要 clang16 (或 commit 号大于 d18806e6733) 来构建 `async_simple` Module。该功能只在 `libstdc++10.3` 中测试过。鉴于目前 Modules 的支持状况，如果在其他版本的标准库中无法正常使用 `async_simple` Module 并不意外。
+
+我们可以用 xmake (>= 0eccc6e) 来构建 `async_simple` Module：
+
+```
+xmake
+```
+
+我们可以用 cmake (>= d18806e673 或 cmake3.26)来构建 `async_simple` Module：
+
+```
+mkdir build_modules && cd build_modules
+CC=clang CXX=clang++ cmake .. -DCMAKE_BUILD_TYPE=Release -DASYNC_SIMPLE_BUILD_MODULES=ON -GNinja
+ninja
+```
+
+**需要注意:** 出于兼容性考虑，目前 main 分支中的 `async_simple` Module 本质上只是将 `async_simple` 的头文件封装为了 `Named Modules` 而已。我们可以在  https://github.com/alibaba/async_simple/tree/CXX20Modules 中找到更完整的 `Named Modules` 使用方式。该分支中同样包含 xmake 和 cmake 的支持。
+
 # 存在问题？
 
 如果在使用时遇到任何问题，我们建议先阅读 [文档](./docs/docs.cn), [issues](https://github.com/alibaba/async_simple/issues)
@@ -205,7 +227,7 @@ CXX=g++-11 CC=gcc-11 cmake .. -DCMAKE_BUILD_TYPE=Release
 # 如何贡献
 
 - 提前阅读下文档：[如何修复Issue](./docs/docs.en/HowToFixIssue.md)。
-- 确保修改后单元测试通过，代码格式化通过。（`git-clang-format HEAD^`）。目前 CI 系统中的 clang-format 版本为 15。当 CI 中提示的 format 结果不好时，也可考虑暂时先 accept 并在 clang-format 社区提交相关 issue。
+- 确保修改后单元测试通过，代码格式化通过。（`git-clang-format HEAD^`）。目前 CI 系统中的 clang-format 版本为 14。当 CI 中提示的 format 结果不好时，也可考虑暂时先 accept 并在 clang-format 社区提交相关 issue。
 - 创建并提交Pull Request，选择开发者Review代码。（候选人：ChuanqiXu9, RainMark, foreverhy, qicosmos）
 - 最终意见一致后，代码将会被合并。
 

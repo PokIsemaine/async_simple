@@ -24,6 +24,13 @@
 #include <iostream>
 
 #include <chrono>
+#ifdef USE_MODULES
+#include <variant>
+#include "async_simple/experimental/coroutine.h"
+#include "async_simple/coro/test/Time.h"
+#include "async_simple/test/unittest.h"
+import async_simple;
+#else
 #include "async_simple/coro/Collect.h"
 #include "async_simple/coro/Lazy.h"
 #include "async_simple/coro/SyncAwait.h"
@@ -32,6 +39,7 @@
 #include "async_simple/experimental/coroutine.h"
 #include "async_simple/test/unittest.h"
 #include "async_simple/util/Condition.h"
+#endif
 
 using namespace std;
 using namespace std::chrono_literals;
@@ -344,9 +352,9 @@ TEST_F(LazyTest, testExecutor) {
     executors::SimpleExecutor e1(1);
     executors::SimpleExecutor e2(1);
     auto addTwo = [&](int x) -> Lazy<int> {
-        CHECK_EXECUTOR(&e2);
+        CHECK_EXECUTOR(&e1);
         auto tmp = co_await getValue(x);
-        CHECK_EXECUTOR(&e2);
+        CHECK_EXECUTOR(&e1);
         co_return tmp + 2;
     };
     {
@@ -356,9 +364,9 @@ TEST_F(LazyTest, testExecutor) {
             CHECK_EXECUTOR(&e1);
             int y = co_await plusOne();
             CHECK_EXECUTOR(&e1);
-            int z = co_await addTwo(y).via(&e2);
+            auto z = co_await addTwo(y).coAwaitTry();
             CHECK_EXECUTOR(&e1);
-            co_return z;
+            co_return z.value();
         };
         triggerValue(100);
         auto val = syncAwait(test().via(&e1));
@@ -1063,6 +1071,37 @@ TEST_F(LazyTest, testCollectAllVariadic) {
         CHECK_EXECUTOR(&e2);
     };
     syncAwait(test4().via(&e2));
+
+    auto testCollectAllPara = [this, &e1]() -> Lazy<> {
+        Lazy<int> intLazy = getValue(2);
+        Lazy<double> doubleLazy = getValue(2.2);
+        Lazy<std::string> stringLazy =
+            getValue(std::string("testCollectAllPara"));
+        auto sleepLazy = [](int rep) -> Lazy<std::thread::id> {
+            std::this_thread::sleep_for(std::chrono::microseconds(rep));
+            co_return std::this_thread::get_id();
+        };
+
+        auto id = std::this_thread::get_id();
+        CHECK_EXECUTOR(&e1);
+        auto out_tuple = co_await collectAllPara(
+            std::move(intLazy), std::move(doubleLazy), std::move(stringLazy),
+            sleepLazy(2), sleepLazy(1));
+        CHECK_EXECUTOR(&e1);
+
+        EXPECT_EQ(std::this_thread::get_id(), id);
+        EXPECT_EQ(5u, std::tuple_size<decltype(out_tuple)>::value);
+
+        auto [v_try_int, v_try_double, v_try_string, id0, id1] =
+            std::move(out_tuple);
+
+        EXPECT_EQ(2, v_try_int.value());
+        EXPECT_DOUBLE_EQ(2.2, v_try_double.value());
+        EXPECT_STREQ("testCollectAllPara", v_try_string.value().c_str());
+
+        CHECK_EXECUTOR(&e1);
+    };
+    syncAwait(testCollectAllPara().via(&e1));
 }
 
 TEST_F(LazyTest, testCollectAny) {
@@ -1314,10 +1353,10 @@ TEST_F(LazyTest, testContext) {
     executors::SimpleExecutor e2(10);
 
     auto addTwo = [&](int x) -> Lazy<int> {
-        CHECK_EXECUTOR(&e2);
+        CHECK_EXECUTOR(&e1);
         auto tid = std::this_thread::get_id();
         auto tmp = co_await getValue(x);
-        CHECK_EXECUTOR(&e2);
+        CHECK_EXECUTOR(&e1);
         EXPECT_EQ(tid, std::this_thread::get_id());
         co_return tmp + 2;
     };
@@ -1330,10 +1369,10 @@ TEST_F(LazyTest, testContext) {
             int y = co_await plusOne();
             CHECK_EXECUTOR(&e1);
             EXPECT_EQ(tid, std::this_thread::get_id());
-            int z = co_await addTwo(y).via(&e2);
+            auto z = co_await addTwo(y).coAwaitTry();
             CHECK_EXECUTOR(&e1);
             EXPECT_EQ(tid, std::this_thread::get_id());
-            co_return z;
+            co_return z.value();
         };
         triggerValue(100);
         auto val = syncAwait(test().via(&e1));

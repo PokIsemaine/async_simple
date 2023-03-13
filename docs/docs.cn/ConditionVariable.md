@@ -11,6 +11,8 @@ async\_simple中实现的条件变量类似于C++标准库中`std::condition_var
 ```c++
 #include <async_simple/coro/ConditionVariable.h>
 
+using namespace async_simple::coro;
+
 SpinLock mtx;
 ConditionVariable<SpinLock> cond;
 int value = 0;
@@ -32,11 +34,15 @@ Lazy<> consumer() {
 }
 ```
 
+- 注意：与`std::condition_vaiable`不同的是，`ConditionVariable<Lock>`是一个模板类，`wait`的参数是`Lock`而非`std::unique_lock<std::mutex>`，我们也提供了`notifyAll`和`nofifyOne`接口，`notify`和`notifyAll`语义相同。
+
 ### Notifier
 - 当条件变量中条件只是true/false这种情况时，条件变量可以退化为Notifier。Notifier不依赖外部互斥锁。
 
 ```c++
 #include <async_simple/coro/ConditionVariable.h>
+
+using namespace async_simple::coro;
 
 Notifier notifier;
 bool ready = false;
@@ -55,3 +61,7 @@ Lazy<> consumer() {
 ```
 
 不论条件变量还是Notifier都允许多个协程同时wait在上面。一旦`notify()`被调用，所有之前阻塞住的协程都将依次被唤醒执行。
+
+## 避免内存泄漏
+
+当一个协程 `co_await condition_variable::wait(...);` 时，程序员需要保证当前协程在程序执行期间会被唤醒，否则程序可能会出现内存泄漏问题。 
